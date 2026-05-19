@@ -13,6 +13,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Send job alert email
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
         run: |
           python << 'EOF'
           import smtplib
@@ -20,9 +23,12 @@ jobs:
           from email.mime.multipart import MIMEMultipart
           import os
 
-          sender = "your-email@gmail.com"
+          sender = "rajakalyanapu1999@gmail.com"
           receiver = os.getenv("EMAIL_ADDRESS")
           password = os.getenv("EMAIL_APP_PASSWORD")
+
+          print("DEBUG receiver:", receiver)
+          print("DEBUG password is None:", password is None)
 
           subject = "Daily Job Alert Test from GitHub Actions"
           body = """
