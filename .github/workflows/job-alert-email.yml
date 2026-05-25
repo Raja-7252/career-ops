@@ -1,12 +1,13 @@
-name: Send Job Alert Email
+name: Daily Job Alert Email
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    # 7:00 UTC every day (about 2:00 AM CDT)
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 jobs:
-  send-email:
+  alert:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -18,29 +19,132 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
         run: |
           python << 'EOF'
-          import smtplib
-          from email.mime.text import MIMEText
-          from email.mime.multipart import MIMEMultipart
           import os
+          import json
+          from datetime import datetime, timedelta
 
-          sender = "kalyanapuraja7@gmail.com"
+          # 1) Load your profile
+          with open("config/profile.json", "r", encoding="utf-8") as f:
+              profile = json.load(f)
+
+          target_titles = [t.lower() for t in profile.get("titles", [])]
+          archetypes = [a.lower() for a in profile.get("archetypes", [])]
+          industries = [i.lower() for i in profile.get("industries", [])]
+          skills = [s.lower() for s in profile.get("skills", [])]
+          deal_breakers = [d.lower() for d in profile.get("deal_breakers", [])]
+          locations = [l.lower() for l in profile.get("locations", [])]
+
+          # 2) For now, use some placeholder jobs (later we replace this with a real API call)
+          jobs = [
+              {
+                  "title": "Healthcare Business Analyst - Digital Transformation",
+                  "company": "Lumenalta",
+                  "location": "Remote, United States",
+                  "posted": (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d"),
+                  "industry": "Healthcare",
+                  "description": "Looking for a Healthcare Business Analyst with SQL, claims experience, and Power BI in payer operations.",
+                  "link": "https://example.com/job-lumenalta"
+              },
+              {
+                  "title": "Business Analyst Consultant - PBM Claims",
+                  "company": "Optum",
+                  "location": "Remote, United States",
+                  "posted": (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d"),
+                  "industry": "Healthcare",
+                  "description": "Senior Business Analyst to work on PBM claims, prior authorization, SQL analytics, and payer operations.",
+                  "link": "https://example.com/job-optum"
+              },
+              {
+                  "title": "BI Analyst (Marketing)",
+                  "company": "RandomCorp",
+                  "location": "New York, NY",
+                  "posted": (datetime.utcnow() - timedelta(days=3)).strftime("%Y-%m-%d"),
+                  "industry": "Retail",
+                  "description": "Business Intelligence Analyst focusing on marketing campaigns, Google Analytics, and dashboards.",
+                  "link": "https://example.com/job-random"
+              }
+          ]
+
+          # 3) Simple rule-based scoring (no AI yet)
+          def score_job(job):
+              title = job["title"].lower()
+              descr = job["description"].lower()
+              industry = job["industry"].lower()
+              loc = job["location"].lower()
+
+              score = 0
+
+              # Title match
+              for t in target_titles:
+                  if t in title:
+                      score += 30
+              for a in archetypes:
+                  if a in title:
+                      score += 20
+
+              # Industry match
+              for ind in industries:
+                  if ind in industry or ind in descr:
+                      score += 20
+
+              # Skills match
+              for s in skills:
+                  if s in descr:
+                      score += 3
+
+              # Location match
+              for l in locations:
+                  if l in loc:
+                      score += 10
+
+              # Deal breakers
+              for db in deal_breakers:
+                  if db in descr:
+                      score -= 50
+
+              return score
+
+          scored_jobs = []
+          for job in jobs:
+              score = score_job(job)
+              scored_jobs.append({**job, "score": score})
+
+          # Sort by score
+          scored_jobs.sort(key=lambda j: j["score"], reverse=True)
+
+          # 4) Build email body
+          sender = "kalyanapuraja7@gmail.com"  # sending Gmail
           receiver = os.getenv("EMAIL_ADDRESS")
           password = os.getenv("EMAIL_APP_PASSWORD")
 
-          print("DEBUG receiver:", receiver)
-          print("DEBUG password is None:", password is None)
+          from email.mime.text import MIMEText
+          from email.mime.multipart import MIMEMultipart
+          import smtplib
 
-          subject = "Daily Job Alert Test from GitHub Actions"
-          body = """
-          Hello,
+          subject = f"Top Job Matches for {datetime.utcnow().strftime('%Y-%m-%d')}"
 
-          This is a test email from your GitHub Actions job alert workflow.
+          lines = []
+          lines.append("Hello Raja,")
+          lines.append("")
+          lines.append("Here are your top job matches today (scored by simple rules, best to lower):")
+          lines.append("")
 
-          If you receive this, your email setup is working.
+          for i, j in enumerate(scored_jobs[:10], start=1):
+              lines.append(f"{i}) Score: {j['score']}")
+              lines.append(f"   Title: {j['title']}")
+              lines.append(f"   Company: {j['company']}")
+              lines.append(f"   Location: {j['location']}")
+              lines.append(f"   Posted: {j['posted']}")
+              lines.append(f"   Link: {j['link']}")
+              lines.append("")
 
-          Best,
-          Your Job Alert Bot
-          """
+          if not scored_jobs:
+              lines.append("No jobs found by the current logic today.")
+
+          lines.append("Best,")
+          lines.append("Your GitHub Job Alert Bot")
+
+          body = "\n".join(lines)
 
           msg = MIMEMultipart()
           msg["From"] = sender
@@ -48,11 +152,10 @@ jobs:
           msg["Subject"] = subject
           msg.attach(MIMEText(body, "plain"))
 
-          server = smtplib.SMTP("smtp.gmail.com", 587)
-          server.starttls()
-          server.login(sender, password)
-          server.send_message(msg)
-          server.quit()
+          with smtplib.SMTP("smtp.gmail.com", 587) as server:
+              server.starttls()
+              server.login(sender, password)
+              server.send_message(msg)
 
-          print("Email sent successfully")
+          print("Email sent with", len(scored_jobs), "jobs.")
           EOF
