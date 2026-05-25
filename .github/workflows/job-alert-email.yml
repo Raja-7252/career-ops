@@ -2,160 +2,238 @@ name: Daily Job Alert Email
 
 on:
   schedule:
-    # 7:00 UTC every day (about 2:00 AM CDT)
-    - cron: '0 7 * * *'
+    - cron: "0 12 * * *"
   workflow_dispatch:
 
 jobs:
-  alert:
+  send_job_alert:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yagmail
 
       - name: Send job alert email
         env:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
         run: |
           python << 'EOF'
           import os
           import json
           from datetime import datetime, timedelta
+          import urllib.request
+          import urllib.parse
+          import yagmail
 
-          # 1) Load your profile
-          with open("config/profile.json", "r", encoding="utf-8") as f:
-              profile = json.load(f)
+          # -------- 1) Define your profile --------
+          profile = {
+              "titles": [
+                  "Data Analyst",
+                  "Business Analyst",
+                  "Healthcare Analyst",
+                  "BI Analyst"
+              ],
+              "industries": [
+                  "Healthcare",
+                  "Health",
+                  "Insurance",
+                  "Analytics"
+              ],
+              "locations": [
+                  "Birmingham, AL",
+                  "Alabama",
+                  "Remote",
+                  "United States"
+              ],
+              "skills": [
+                  "SQL",
+                  "Python",
+                  "Power BI",
+                  "Tableau",
+                  "Excel"
+              ]
+          }
 
-          target_titles = [t.lower() for t in profile.get("titles", [])]
-          archetypes = [a.lower() for a in profile.get("archetypes", [])]
-          industries = [i.lower() for i in profile.get("industries", [])]
-          skills = [s.lower() for s in profile.get("skills", [])]
-          deal_breakers = [d.lower() for d in profile.get("deal_breakers", [])]
-          locations = [l.lower() for l in profile.get("locations", [])]
+          # -------- 2) Collect jobs from both sources --------
+          jobs = []
 
-          # 2) For now, use some placeholder jobs (later we replace this with a real API call)
-          jobs = [
-              {
-                  "title": "Healthcare Business Analyst - Digital Transformation",
-                  "company": "Lumenalta",
-                  "location": "Remote, United States",
-                  "posted": (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d"),
-                  "industry": "Healthcare",
-                  "description": "Looking for a Healthcare Business Analyst with SQL, claims experience, and Power BI in payer operations.",
-                  "link": "https://example.com/job-lumenalta"
-              },
-              {
-                  "title": "Business Analyst Consultant - PBM Claims",
-                  "company": "Optum",
-                  "location": "Remote, United States",
-                  "posted": (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d"),
-                  "industry": "Healthcare",
-                  "description": "Senior Business Analyst to work on PBM claims, prior authorization, SQL analytics, and payer operations.",
-                  "link": "https://example.com/job-optum"
-              },
-              {
-                  "title": "BI Analyst (Marketing)",
-                  "company": "RandomCorp",
-                  "location": "New York, NY",
-                  "posted": (datetime.utcnow() - timedelta(days=3)).strftime("%Y-%m-%d"),
-                  "industry": "Retail",
-                  "description": "Business Intelligence Analyst focusing on marketing campaigns, Google Analytics, and dashboards.",
-                  "link": "https://example.com/job-random"
+          # 2a) Adzuna (US)
+          app_id = os.getenv("ADZUNA_APP_ID")
+          app_key = os.getenv("ADZUNA_APP_KEY")
+
+          if app_id and app_key:
+              query = " OR ".join(profile.get("titles", []))
+              params = {
+                  "app_id": app_id,
+                  "app_key": app_key,
+                  "what": query,
+                  "where": "United States",
+                  "results_per_page": 25,
+                  "content-type": "application/json"
               }
-          ]
+              adzuna_url = "https://api.adzuna.com/v1/api/jobs/us/search/1?" + urllib.parse.urlencode(params)
 
-          # 3) Simple rule-based scoring (no AI yet)
+              try:
+                  with urllib.request.urlopen(adzuna_url) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      for item in data.get("results", []):
+                          jobs.append({
+                              "source": "Adzuna",
+                              "title": item.get("title", ""),
+                              "company": item.get("company", {}).get("display_name", "Unknown"),
+                              "location": item.get("location", {}).get("display_name", ""),
+                              "posted": item.get("created", "")[:10],
+                              "industry": item.get("category", {}).get("label", ""),
+                              "description": item.get("description", ""),
+                              "link": item.get("redirect_url", "")
+                          })
+              except Exception as e:
+                  print("Error fetching jobs from Adzuna:", e)
+          else:
+              print("Missing ADZUNA_APP_ID or ADZUNA_APP_KEY")
+
+          # 2b) Remotive (remote jobs)
+          # Public API returns all active remote jobs; we filter in code. [web:336][web:337]
+          try:
+              remotive_url = "https://remotive.com/api/remote-jobs"
+              with urllib.request.urlopen(remotive_url) as resp:
+                  rdata = json.loads(resp.read().decode("utf-8"))
+                  for item in rdata.get("jobs", []):
+                      title = item.get("title", "")
+                      company = item.get("company_name", "Unknown")
+                      location = item.get("candidate_required_location", "")
+                      category = item.get("category", "")
+                      descr = item.get("description", "")
+                      link = item.get("url", "")
+
+                      # Filter roughly by title match
+                      lowered_title = title.lower()
+                      if not any(t.lower() in lowered_title for t in profile.get("titles", [])):
+                          continue
+
+                      jobs.append({
+                          "source": "Remotive",
+                          "title": title,
+                          "company": company,
+                          "location": location,
+                          "posted": item.get("publication_date", "")[:10] if item.get("publication_date") else "",
+                          "industry": category,
+                          "description": descr,
+                          "link": link
+                      })
+          except Exception as e:
+              print("Error fetching jobs from Remotive:", e)
+
+          # -------- 3) Score jobs --------
           def score_job(job):
-              title = job["title"].lower()
-              descr = job["description"].lower()
-              industry = job["industry"].lower()
-              loc = job["location"].lower()
-
               score = 0
 
-              # Title match
-              for t in target_titles:
-                  if t in title:
+              title = job.get("title", "").lower()
+              descr = job.get("description", "").lower()
+              company = job.get("company", "").lower()
+              location = job.get("location", "").lower()
+              industry = job.get("industry", "").lower()
+
+              # Title match (strong)
+              for t in profile["titles"]:
+                  if t.lower() in title:
                       score += 30
-              for a in archetypes:
-                  if a in title:
-                      score += 20
+
+              # Skills in description
+              for s in profile["skills"]:
+                  if s.lower() in descr:
+                      score += 5
 
               # Industry match
-              for ind in industries:
-                  if ind in industry or ind in descr:
-                      score += 20
-
-              # Skills match
-              for s in skills:
-                  if s in descr:
-                      score += 3
-
-              # Location match
-              for l in locations:
-                  if l in loc:
+              for ind in profile["industries"]:
+                  if ind.lower() in industry or ind.lower() in descr:
                       score += 10
 
-              # Deal breakers
-              for db in deal_breakers:
-                  if db in descr:
-                      score -= 50
+              # Location / remote hints
+              for loc in profile["locations"]:
+                  if loc.lower() in location or loc.lower() in descr:
+                      score += 8
+
+              # Slight bonus for well‑known companies (example list – customize)
+              good_companies = ["blue cross", "humana", "optum", "cvs", "unitedhealth", "kaiser"]
+              if any(gc in company for gc in good_companies):
+                  score += 10
+
+              # Recency bonus if we have a posted date
+              posted = job.get("posted", "")
+              if posted:
+                  try:
+                      posted_dt = datetime.fromisoformat(posted)
+                      days_ago = (datetime.utcnow() - posted_dt).days
+                      if days_ago <= 3:
+                          score += 10
+                      elif days_ago <= 7:
+                          score += 5
+                  except Exception:
+                      pass
 
               return score
 
           scored_jobs = []
-          for job in jobs:
-              score = score_job(job)
-              scored_jobs.append({**job, "score": score})
+          for j in jobs:
+              j_score = score_job(j)
+              j["score"] = j_score
+              scored_jobs.append(j)
 
-          # Sort by score
-          scored_jobs.sort(key=lambda j: j["score"], reverse=True)
+          scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
-          # 4) Build email body
-          sender = "kalyanapuraja7@gmail.com"  # sending Gmail
-          receiver = os.getenv("EMAIL_ADDRESS")
-          password = os.getenv("EMAIL_APP_PASSWORD")
+          top_jobs = scored_jobs[:15]
 
-          from email.mime.text import MIMEText
-          from email.mime.multipart import MIMEMultipart
-          import smtplib
+          # -------- 4) Build email body --------
+          today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
-          subject = f"Top Job Matches for {datetime.utcnow().strftime('%Y-%m-%d')}"
+          if not top_jobs:
+              body_text = f"No matching jobs found today ({today_str}). Try updating your profile filters.\n"
+          else:
+              lines = []
+              lines.append(f"Top job matches for {today_str}\n")
+              for idx, job in enumerate(top_jobs, start=1):
+                  lines.append(f"{idx}. [{job['source']}] {job['title']} at {job['company']}")
+                  loc = job.get("location", "")
+                  posted = job.get("posted", "")
+                  if loc or posted:
+                      lines.append(f"   Location: {loc or 'N/A'} | Posted: {posted or 'N/A'}")
+                  lines.append(f"   Link: {job['link']}")
+                  lines.append(f"   Score: {job['score']}")
+                  lines.append("")  # blank line between jobs
+              body_text = "\n".join(lines)
 
-          lines = []
-          lines.append("Hello Raja,")
-          lines.append("")
-          lines.append("Here are your top job matches today (scored by simple rules, best to lower):")
-          lines.append("")
+          # -------- 5) Send email via Gmail SMTP --------
+          email_address = os.getenv("EMAIL_ADDRESS")
+          email_pass = os.getenv("EMAIL_APP_PASSWORD")
 
-          for i, j in enumerate(scored_jobs[:10], start=1):
-              lines.append(f"{i}) Score: {j['score']}")
-              lines.append(f"   Title: {j['title']}")
-              lines.append(f"   Company: {j['company']}")
-              lines.append(f"   Location: {j['location']}")
-              lines.append(f"   Posted: {j['posted']}")
-              lines.append(f"   Link: {j['link']}")
-              lines.append("")
+          if not email_address or not email_pass:
+              raise RuntimeError("Missing EMAIL_ADDRESS or EMAIL_APP_PASSWORD env vars")
 
-          if not scored_jobs:
-              lines.append("No jobs found by the current logic today.")
+          subject = f"Top Job Matches for {today_str}"
 
-          lines.append("Best,")
-          lines.append("Your GitHub Job Alert Bot")
+          try:
+              yag = yagmail.SMTP(email_address, email_pass)
+              yag.send(
+                  to=email_address,
+                  subject=subject,
+                  contents=body_text
+              )
+              print("Email sent successfully.")
+          except Exception as e:
+              print("Error sending email:", e)
 
-          body = "\n".join(lines)
-
-          msg = MIMEMultipart()
-          msg["From"] = sender
-          msg["To"] = receiver
-          msg["Subject"] = subject
-          msg.attach(MIMEText(body, "plain"))
-
-          with smtplib.SMTP("smtp.gmail.com", 587) as server:
-              server.starttls()
-              server.login(sender, password)
-              server.send_message(msg)
-
-          print("Email sent with", len(scored_jobs), "jobs.")
           EOF
