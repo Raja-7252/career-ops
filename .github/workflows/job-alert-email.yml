@@ -78,13 +78,15 @@ jobs:
           print(f"ADZUNA_APP_KEY present: {bool(app_key)}")
 
           if app_id and app_key:
-              query = " OR ".join(profile.get("titles", []))
+                          # Simpler query: focus on data analyst keywords
+              query = "business analyst"
+
               params = {
                   "app_id": app_id,
                   "app_key": app_key,
                   "what": query,
                   "where": "United States",
-                  "results_per_page": 10,
+                  "results_per_page": 25,
                   "content-type": "application/json"
               }
               adzuna_url = "https://api.adzuna.com/v1/api/jobs/us/search/1?" + urllib.parse.urlencode(params)
