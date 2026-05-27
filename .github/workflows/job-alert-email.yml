@@ -105,8 +105,8 @@ jobs:
           else:
               print("Missing ADZUNA_APP_ID or ADZUNA_APP_KEY")
 
-          # 2b) Remotive (remote jobs)
-          # Public API returns all active remote jobs; we filter in code. [web:336][web:337]
+                   # 2b) Remotive (remote jobs)
+          # Public API returns all active remote jobs; we filter in code.
           try:
               remotive_url = "https://remotive.com/api/remote-jobs"
               with urllib.request.urlopen(remotive_url) as resp:
@@ -134,7 +134,7 @@ jobs:
                           "description": descr,
                           "link": link
                       })
-                    except Exception as e:
+          except Exception as e:
               print("Error fetching jobs from Remotive:", e)
 
           # Debug: how many jobs did we pull?
