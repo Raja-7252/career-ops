@@ -1,0 +1,41 @@
+Raja Kalyanapu 
+Birmingham, AL | (205) 207-3479 | kalyanapuraja7@gmail.com | linkedin.com/in/kalyanapuraja | raja-bi
+portfolio.netlify.app 
+PROFESSIONAL SUMMARY 
+Business Analyst with 4+ years of progressive experience in pharmaceutical market access and payer 
+operations. Reduced patient onboarding time by 57% (14→6 days) and increased prior authorization first-pass 
+approval rates from 62% to 89% using SQL and Tableau. Strong at bridging data analysis, requirements 
+gathering, and cross-functional collaboration in regulated healthcare environments. 
+SKILLS 
+• Business Analysis: Requirements Elicitation, User Stories, Gap Analysis, Process Mapping, BRD/FRD, 
+UAT, Stakeholder Workshops, Prioritization 
+• Healthcare Domain: Prior Authorization, Claims Adjudication, Revenue Cycle Management, Specialty 
+Pharmacy, Patient Onboarding, Market Access, Payer Operations, Provider Network, HIPAA, 
+Medicare/Medicaid 
+• Analytics & Reporting: SQL, Tableau, Power BI, Advanced Excel (pivot tables, VLOOKUP, Power 
+Query), Dashboard Development 
+• Tools & Methods: JIRA, Confluence, Agile/Scrum, Visio/Lucid chart 
+PROFESSIONAL EXPERIENCE 
+Senior Business Analyst Bristol Myers Squibb — Birmingham, AL | May 2024 – Present 
+• Analyzed prior authorization workflows across 12 specialty pharmacy partners, identified 8 bottlenecks, 
+and reduced patient onboarding time by 57% (14 to 6 days). 
+• Built SQL-based Tableau dashboards tracking first-pass PA approval rates by payer, increasing success 
+rate from 62% to 89% for oncology and immunology therapies. 
+• Conducted cost-avoidance analysis demonstrating $4,200 per-patient savings; findings used in 3 major 
+payer contract renewals. 
+• Facilitated stakeholder workshops with 15+ Field Reimbursement Managers, authored user stories, and 
+prioritized 3 key platform features. 
+• Coordinated UAT cycles and Agile/Scrum ceremonies while ensuring HIPAA compliance. 
+Business Analyst Mphasis — Hyderabad, India | January 2020 – July 2022 
+• Analyzed claims adjudication for 2 health insurance clients (Medicare/Medicaid), reduced rejection rate 
+from 22% to 12% within two quarters. 
+• Developed Power BI dashboards for cashless hospitalization program, cutting authorization turnaround 
+time by 50% (48 to 24 hours). 
+• Generated wellness program metrics showing ₹1,800 per-policyholder savings for 150,000+ lives to 
+support client retention. 
+• Facilitated requirements workshops, documented user stories, and performed gap analysis for 
+authorization and claims workflows. 
+• Participated in Agile/Scrum ceremonies and UAT cycles to deliver process and UX improvements. 
+EDUCATION 
+Master of Science in Computer Engineering University of Alabama at Birmingham — Birmingham, AL | 
+August 2022 – April 2024 GPA: 4.0/4.0 
