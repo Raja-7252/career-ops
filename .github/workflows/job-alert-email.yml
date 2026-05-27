@@ -41,8 +41,8 @@ jobs:
           # -------- 1) Define your profile --------
           profile = {
               "titles": [
-                  "Data Analyst",
                   "Business Analyst",
+                  "Data Analyst",
                   "Healthcare Analyst",
                   "BI Analyst"
               ],
@@ -53,9 +53,9 @@ jobs:
                   "Analytics"
               ],
               "locations": [
+                  "Remote",
                   "Birmingham, AL",
                   "Alabama",
-                  "Remote",
                   "United States"
               ],
               "skills": [
@@ -67,10 +67,10 @@ jobs:
               ]
           }
 
-          # -------- 2) Collect jobs from both sources --------
+          # -------- 2) Collect jobs from Adzuna --------
           jobs = []
 
-                   # 2a) Adzuna (US)
+          # 2a) Adzuna (US)
           app_id = os.getenv("ADZUNA_APP_ID")
           app_key = os.getenv("ADZUNA_APP_KEY")
 
@@ -78,7 +78,7 @@ jobs:
           print(f"ADZUNA_APP_KEY present: {bool(app_key)}")
 
           if app_id and app_key:
-                          # Simpler query: focus on data analyst keywords
+              # Search mainly for Business Analyst; scoring will also allow Data Analyst, etc.
               query = "business analyst"
 
               params = {
@@ -97,8 +97,51 @@ jobs:
                       data = json.loads(resp.read().decode("utf-8"))
                       results = data.get("results", [])
                       print(f"Adzuna returned {len(results)} results")
+
+                      # -------- 2b) Define filter for bad jobs (contract / staffing) --------
+                      def is_bad_job(job):
+                          title = job.get("title", "").lower()
+                          descr = job.get("description", "").lower()
+                          company = job.get("company", "").lower()
+
+                          # Words that usually mean contract / staffing / third-party
+                          bad_keywords = [
+                              "staffing agency",
+                              "staffing firm",
+                              "recruitment agency",
+                              "recruiting agency",
+                              "consulting firm",
+                              "3rd party",
+                              "third party",
+                              "corp to corp",
+                              "c2c",
+                              "contract role",
+                              "contract position",
+                              "w2 contract",
+                              "1099"
+                          ]
+
+                          # Known staffing/consulting companies you want to avoid
+                          bad_companies = [
+                              "insight global",
+                              "apex systems",
+                              "manpowergroup",
+                              "robert half",
+                              "system one",
+                              "adecco",
+                              "axelon"
+                          ]
+
+                          if any(k in descr or k in title for k in bad_keywords):
+                              return True
+
+                          if any(bc in company for bc in bad_companies):
+                              return True
+
+                          return False
+
                       for item in results:
-                          jobs.append({
+                          job = {
                               "source": "Adzuna",
                               "title": item.get("title", ""),
                               "company": item.get("company", {}).get("display_name", "Unknown"),
@@ -107,7 +150,13 @@ jobs:
                               "industry": item.get("category", {}).get("label", ""),
                               "description": item.get("description", ""),
                               "link": item.get("redirect_url", "")
-                          })
+                          }
+
+                          # Skip bad jobs (contract / staffing / third-party)
+                          if is_bad_job(job):
+                              continue
+
+                          jobs.append(job)
               except Exception as e:
                   print("Error fetching jobs from Adzuna:", e)
           else:
@@ -115,7 +164,7 @@ jobs:
 
           print(f"Total jobs pulled before scoring: {len(jobs)}")
 
-          # -------- 3) Score jobs --------
+          # -------- 3) Score jobs (stronger weights so 90+ means 'very good') --------
           def score_job(job):
               score = 0
 
@@ -125,41 +174,47 @@ jobs:
               location = job.get("location", "").lower()
               industry = job.get("industry", "").lower()
 
-              # Title match (strong)
+              # Title match (very strong)
               for t in profile["titles"]:
                   if t.lower() in title:
-                      score += 30
+                      score += 40
 
-              # Skills in description
+              # Extra bonus if explicitly Business Analyst
+              if "business analyst" in title:
+                  score += 20
+
+              # Skills in description (stronger now)
               for s in profile["skills"]:
                   if s.lower() in descr:
-                      score += 5
+                      score += 8
 
               # Industry match
               for ind in profile["industries"]:
                   if ind.lower() in industry or ind.lower() in descr:
                       score += 10
 
-              # Location / remote hints
+              # Location / remote hints (stronger)
               for loc in profile["locations"]:
                   if loc.lower() in location or loc.lower() in descr:
-                      score += 8
+                      score += 10
 
               # Slight bonus for well‑known companies (example list – customize)
-              good_companies = ["blue cross", "humana", "optum", "cvs", "unitedhealth", "kaiser"]
+              good_companies = ["blue cross", "humana", "optum", "cvs", "unitedhealth", "kaiser", "amazon"]
               if any(gc in company for gc in good_companies):
                   score += 10
 
-              # Recency bonus if we have a posted date
+              # Recency bonus (stronger)
               posted = job.get("posted", "")
               if posted:
                   try:
                       posted_dt = datetime.fromisoformat(posted)
                       days_ago = (datetime.utcnow() - posted_dt).days
                       if days_ago <= 3:
-                          score += 10
+                          score += 20
                       elif days_ago <= 7:
-                          score += 5
+                          score += 15
+                      elif days_ago <= 14:
+                          score += 10
                   except Exception:
                       pass
 
@@ -173,17 +228,18 @@ jobs:
 
           scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
-          top_jobs = scored_jobs[:15]
+          # Keep only jobs with score >= 90
+          better_fit_jobs = [j for j in scored_jobs if j["score"] >= 90]
 
-          # -------- 4) Build email body --------
           today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
-          if not top_jobs:
-              body_text = f"No matching jobs found today ({today_str}). Try updating your profile filters.\n"
+          # -------- 4) Build email body --------
+          if not better_fit_jobs:
+              body_text = f"No better‑fit jobs (score 90+) found today ({today_str}).\n"
           else:
               lines = []
-              lines.append(f"Top job matches for {today_str}\n")
-              for idx, job in enumerate(top_jobs, start=1):
+              lines.append(f"Top better‑fit jobs for {today_str} (score 90+)\n")
+              for idx, job in enumerate(better_fit_jobs, start=1):
                   lines.append(f"{idx}. [{job['source']}] {job['title']} at {job['company']}")
                   loc = job.get("location", "")
                   posted = job.get("posted", "")
