@@ -38,7 +38,7 @@ jobs:
           import urllib.parse
           import yagmail
 
-          # -------- 1) Define your profile --------
+          # -------- 1) Define your profile (titles, industries, locations) --------
           profile = {
               "titles": [
                   "Business Analyst",
@@ -58,19 +58,139 @@ jobs:
                   "Alabama",
                   "United States"
               ],
-              "skills": [
-                  "SQL",
-                  "Python",
-                  "Power BI",
-                  "Tableau",
-                  "Excel"
-              ]
+              # skills will be filled from your resume.txt (with a safe fallback)
+              "skills": []
           }
+
+          # Known skills list we will search for in your resume text
+          KNOWN_SKILLS = [
+              # Analytics & reporting
+              "SQL",
+              "Tableau",
+              "Power BI",
+              "Excel",
+              "Power Query",
+              "dashboard development",
+              "metrics",
+              "kpi",
+
+              # Business analysis methods
+              "requirements elicitation",
+              "user stories",
+              "gap analysis",
+              "process mapping",
+              "BRD",
+              "FRD",
+              "UAT",
+              "stakeholder workshops",
+              "prioritization",
+              "workshops",
+
+              # Healthcare domain
+              "prior authorization",
+              "claims adjudication",
+              "revenue cycle management",
+              "specialty pharmacy",
+              "patient onboarding",
+              "market access",
+              "payer operations",
+              "provider network",
+              "HIPAA",
+              "Medicare",
+              "Medicaid",
+
+              # Tools & methods
+              "JIRA",
+              "Confluence",
+              "Visio",
+              "Lucidchart",
+              "Agile",
+              "Scrum"
+          ]
+
+          # Try to read your resume.txt and extract which of these skills you actually have
+          resume_skills = set()
+          try:
+              with open("resume.txt", "r", encoding="utf-8") as f:
+                  resume_text = f.read().lower()
+                  for skill in KNOWN_SKILLS:
+                      if skill.lower() in resume_text:
+                          resume_skills.add(skill)
+          except FileNotFoundError:
+              print("resume.txt not found in repository root. Using default skills list.")
+              resume_skills = {
+                  "SQL",
+                  "Tableau",
+                  "Power BI",
+                  "Excel",
+                  "Power Query",
+                  "dashboard development",
+                  "requirements elicitation",
+                  "user stories",
+                  "gap analysis",
+                  "process mapping",
+                  "BRD",
+                  "FRD",
+                  "UAT",
+                  "stakeholder workshops",
+                  "prior authorization",
+                  "claims adjudication",
+                  "revenue cycle management",
+                  "specialty pharmacy",
+                  "patient onboarding",
+                  "market access",
+                  "payer operations",
+                  "provider network",
+                  "HIPAA",
+                  "Medicare",
+                  "Medicaid",
+                  "JIRA",
+                  "Confluence",
+                  "Visio",
+                  "Lucidchart"
+              }
+
+          # If nothing matched, fall back to default skills
+          if not resume_skills:
+              print("No skills detected from resume.txt. Using default skills list.")
+              resume_skills = {
+                  "SQL",
+                  "Tableau",
+                  "Power BI",
+                  "Excel",
+                  "Power Query",
+                  "dashboard development",
+                  "requirements elicitation",
+                  "user stories",
+                  "gap analysis",
+                  "process mapping",
+                  "BRD",
+                  "FRD",
+                  "UAT",
+                  "stakeholder workshops",
+                  "prior authorization",
+                  "claims adjudication",
+                  "revenue cycle management",
+                  "specialty pharmacy",
+                  "patient onboarding",
+                  "market access",
+                  "payer operations",
+                  "provider network",
+                  "HIPAA",
+                  "Medicare",
+                  "Medicaid",
+                  "JIRA",
+                  "Confluence",
+                  "Visio",
+                  "Lucidchart"
+              }
+
+          profile["skills"] = sorted(resume_skills)
+          print(f"Using skills from resume/default: {profile['skills']}")
 
           # -------- 2) Collect jobs from Adzuna --------
           jobs = []
 
-          # 2a) Adzuna (US)
           app_id = os.getenv("ADZUNA_APP_ID")
           app_key = os.getenv("ADZUNA_APP_KEY")
 
@@ -98,7 +218,7 @@ jobs:
                       results = data.get("results", [])
                       print(f"Adzuna returned {len(results)} results")
 
-                      # -------- 2b) Define filter for bad jobs (contract / staffing) --------
+                      # Filter out obvious contract / staffing / third-party roles
                       def is_bad_job(job):
                           title = job.get("title", "").lower()
                           descr = job.get("description", "").lower()
@@ -164,7 +284,7 @@ jobs:
 
           print(f"Total jobs pulled before scoring: {len(jobs)}")
 
-          # -------- 3) Score jobs (stronger weights so 90+ means 'very good') --------
+          # -------- 3) Score jobs (weights tuned so 90+ = 'very good fit') --------
           def score_job(job):
               score = 0
 
@@ -198,7 +318,7 @@ jobs:
                   if loc.lower() in location or loc.lower() in descr:
                       score += 10
 
-              # Slight bonus for well‑known companies (example list – customize)
+              # Slight bonus for well-known companies (example list – customize)
               good_companies = ["blue cross", "humana", "optum", "cvs", "unitedhealth", "kaiser", "amazon"]
               if any(gc in company for gc in good_companies):
                   score += 10
@@ -235,10 +355,10 @@ jobs:
 
           # -------- 4) Build email body --------
           if not better_fit_jobs:
-              body_text = f"No better‑fit jobs (score 90+) found today ({today_str}).\n"
+              body_text = f"No better-fit jobs (score 90+) found today ({today_str}).\n"
           else:
               lines = []
-              lines.append(f"Top better‑fit jobs for {today_str} (score 90+)\n")
+              lines.append(f"Top better-fit jobs for {today_str} (score 90+)\n")
               for idx, job in enumerate(better_fit_jobs, start=1):
                   lines.append(f"{idx}. [{job['source']}] {job['title']} at {job['company']}")
                   loc = job.get("location", "")
