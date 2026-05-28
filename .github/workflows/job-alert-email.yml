@@ -349,7 +349,7 @@ jobs:
           scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
           # Keep only jobs with score >= 90
-          better_fit_jobs = [j for j in scored_jobs if j["score"] >= 90]
+          better_fit_jobs = [j for j in scored_jobs if j["score"] >= 80]
 
           today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
